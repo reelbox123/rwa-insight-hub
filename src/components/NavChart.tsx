@@ -1,39 +1,21 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
-  LineChart,
-  Line,
+  AreaChart,
+  Area,
   XAxis,
   YAxis,
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-  Area,
-  AreaChart,
 } from "recharts";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { generateChartData } from "@/lib/realtime-data";
 
 interface NavChartProps {
   poolId: string;
+  baseValue?: number;
 }
-
-const generateChartData = (days: number) => {
-  const data = [];
-  const baseValue = 10000000;
-  let currentValue = baseValue;
-
-  for (let i = days; i >= 0; i--) {
-    const date = new Date();
-    date.setDate(date.getDate() - i);
-    const change = (Math.random() - 0.45) * 100000;
-    currentValue = Math.max(baseValue * 0.9, currentValue + change);
-    data.push({
-      date: date.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
-      nav: currentValue,
-    });
-  }
-  return data;
-};
 
 const timeframes = [
   { label: "24H", days: 1 },
@@ -41,34 +23,60 @@ const timeframes = [
   { label: "30D", days: 30 },
 ];
 
-export function NavChart({ poolId }: NavChartProps) {
+export function NavChart({ poolId, baseValue = 10000000 }: NavChartProps) {
   const [selectedTimeframe, setSelectedTimeframe] = useState(7);
-  const data = generateChartData(selectedTimeframe);
+  const [data, setData] = useState<any[]>([]);
+
+  useEffect(() => {
+    const chartData = generateChartData(baseValue, selectedTimeframe);
+    setData(chartData);
+
+    // Update chart every 3 seconds
+    const interval = setInterval(() => {
+      setData((prev) => {
+        const lastPoint = prev[prev.length - 1];
+        const change = (Math.random() - 0.48) * baseValue * 0.002;
+        const newNav = Math.max(baseValue * 0.85, lastPoint.nav + change);
+        const newPoint = {
+          timestamp: Date.now(),
+          date: new Date().toLocaleDateString("en-US", { 
+            month: "short", 
+            day: "numeric",
+            hour: "2-digit" 
+          }),
+          nav: newNav,
+        };
+        return [...prev.slice(1), newPoint];
+      });
+    }, 3000);
+
+    return () => clearInterval(interval);
+  }, [selectedTimeframe, baseValue]);
 
   const formatYAxis = (value: number) => {
-    return `$${(value / 1000000).toFixed(1)}M`;
+    if (value >= 1000000) return `$${(value / 1000000).toFixed(1)}M`;
+    if (value >= 1000) return `$${(value / 1000).toFixed(0)}K`;
+    return `$${value.toFixed(2)}`;
   };
 
   const formatTooltip = (value: number) => {
-    return new Intl.NumberFormat("en-US", {
-      style: "currency",
-      currency: "USD",
-      minimumFractionDigits: 2,
-    }).format(value);
+    if (value >= 1000000) return `$${(value / 1000000).toFixed(4)}M`;
+    if (value >= 1000) return `$${(value / 1000).toFixed(2)}K`;
+    return `$${value.toFixed(4)}`;
   };
 
   return (
-    <div className="glass-card p-6 animate-fade-in" style={{ animationDelay: "100ms" }}>
-      <div className="flex items-center justify-between mb-6">
-        <h3 className="text-lg font-semibold text-foreground">NAV Over Time</h3>
-        <div className="flex gap-1 p-1 bg-muted/50 rounded-lg">
+    <div className="glass-card p-4 animate-fade-in" style={{ animationDelay: "100ms" }}>
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="text-xs font-semibold text-foreground">NAV Over Time</h3>
+        <div className="flex gap-0.5 p-0.5 bg-muted/50 rounded-md">
           {timeframes.map((tf) => (
             <Button
               key={tf.label}
               variant={selectedTimeframe === tf.days ? "default" : "ghost"}
               size="sm"
               className={cn(
-                "h-7 px-3 text-xs",
+                "h-6 px-2 text-[10px]",
                 selectedTimeframe === tf.days && "shadow-sm"
               )}
               onClick={() => setSelectedTimeframe(tf.days)}
@@ -79,7 +87,7 @@ export function NavChart({ poolId }: NavChartProps) {
         </div>
       </div>
 
-      <div className="h-[300px]">
+      <div className="h-[200px]">
         <ResponsiveContainer width="100%" height="100%">
           <AreaChart data={data} margin={{ top: 5, right: 5, left: 0, bottom: 5 }}>
             <defs>
@@ -96,32 +104,33 @@ export function NavChart({ poolId }: NavChartProps) {
             <XAxis
               dataKey="date"
               stroke="hsl(230, 20%, 55%)"
-              fontSize={12}
+              fontSize={9}
               tickLine={false}
               axisLine={false}
             />
             <YAxis
               stroke="hsl(230, 20%, 55%)"
-              fontSize={12}
+              fontSize={9}
               tickLine={false}
               axisLine={false}
               tickFormatter={formatYAxis}
+              width={50}
             />
             <Tooltip
               contentStyle={{
                 backgroundColor: "hsl(230, 40%, 8%)",
                 border: "1px solid hsl(230, 30%, 18%)",
-                borderRadius: "8px",
-                boxShadow: "0 4px 20px rgba(0, 0, 0, 0.3)",
+                borderRadius: "6px",
+                fontSize: "10px",
               }}
-              labelStyle={{ color: "hsl(230, 60%, 98%)" }}
+              labelStyle={{ color: "hsl(230, 60%, 98%)", fontSize: "10px" }}
               formatter={(value: number) => [formatTooltip(value), "NAV"]}
             />
             <Area
               type="monotone"
               dataKey="nav"
               stroke="hsl(165, 100%, 44%)"
-              strokeWidth={2}
+              strokeWidth={1.5}
               fill="url(#navGradient)"
             />
           </AreaChart>
