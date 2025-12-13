@@ -2,58 +2,75 @@ import { Navbar } from "@/components/Navbar";
 import { StatsCard } from "@/components/StatsCard";
 import { PoolsTable } from "@/components/PoolsTable";
 import { Layers, DollarSign, Clock, RefreshCw } from "lucide-react";
+import { useRealtimeData } from "@/hooks/useRealtimeData";
 
 const Index = () => {
+  const { pools, stats } = useRealtimeData();
+
+  const formatNav = (value: number) => {
+    if (value >= 1000000) return `$${(value / 1000000).toFixed(2)}M`;
+    return `$${value.toFixed(2)}`;
+  };
+
+  const timeSinceUpdate = () => {
+    const seconds = Math.floor((Date.now() - stats.lastUpdateTime) / 1000);
+    if (seconds < 60) return `${seconds}s ago`;
+    return `${Math.floor(seconds / 60)}m ago`;
+  };
+
   return (
     <div className="min-h-screen bg-background">
       <Navbar />
       
-      <main className="container mx-auto px-4 py-8">
+      <main className="container mx-auto px-4 py-4">
         {/* Page Header */}
-        <div className="mb-8 animate-fade-in">
-          <h1 className="text-4xl font-bold text-foreground mb-2">
+        <div className="mb-4 animate-fade-in">
+          <h1 className="text-xl font-bold text-foreground mb-1">
             NAV Overview
           </h1>
-          <p className="text-lg text-muted-foreground">
-            Real-time NAV transparency for tokenized RWA pools on Mantle.
+          <p className="text-xs text-muted-foreground">
+            Real-time NAV transparency for tokenized RWA pools
           </p>
         </div>
 
         {/* Stats Strip */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
           <StatsCard
-            title="Total Pools"
-            value="5"
-            subtitle="Active RWA pools"
+            title="Active RWA Pools"
+            value={stats.activePoolsCount.toString()}
+            subtitle="Currently healthy"
             icon={Layers}
             delay={0}
           />
           <StatsCard
             title="Total On-Chain NAV"
-            value="$52.95M"
-            subtitle="Combined pool value"
+            value={formatNav(stats.totalNav)}
+            subtitle="Combined value"
             icon={DollarSign}
-            trend={{ value: "+1.2% (24h)", positive: true }}
+            trend={{ 
+              value: `${stats.navChange >= 0 ? "+" : ""}${stats.navChange.toFixed(2)}% (24h)`, 
+              positive: stats.navChange >= 0 
+            }}
             delay={50}
           />
           <StatsCard
-            title="Last Update (Global)"
-            value="8 min ago"
-            subtitle="Most recent NAV update"
+            title="Last Update"
+            value={timeSinceUpdate()}
+            subtitle="Most recent"
             icon={Clock}
             delay={100}
           />
           <StatsCard
-            title="Avg Refresh Interval"
-            value="24h"
-            subtitle="Typical update frequency"
+            title="Refresh Rate"
+            value="2s"
+            subtitle="Real-time updates"
             icon={RefreshCw}
             delay={150}
           />
         </div>
 
         {/* Pools Table */}
-        <PoolsTable />
+        <PoolsTable pools={pools} />
       </main>
     </div>
   );
