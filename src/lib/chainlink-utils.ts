@@ -248,16 +248,16 @@ export const NAV_CALCULATION_SOURCE = `
 // This function fetches off-chain asset data and calculates NAV
 
 const poolId = args[0];
-const apiUrl = \\\`https://api.navregistry.io/v1/pools/\\\\${poolId}/assets\\\\\`;
+const apiUrl = "https://api.navregistry.io/v1/pools/" + poolId + "/assets";
 
 const response = await Functions.makeHttpRequest({
   url: apiUrl,
-  method: \\\"GET\\\",
-  headers: { \\\"Content-Type\\\": \\\"application/json\\\" }
+  method: "GET",
+  headers: { "Content-Type": "application/json" }
 });
 
 if (response.error) {
-  throw Error(\\\"API request failed\\\");
+  throw Error("API request failed");
 }
 
 const assets = response.data.assets;
