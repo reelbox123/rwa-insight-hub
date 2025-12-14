@@ -2,8 +2,10 @@ import { useParams, useNavigate } from "react-router-dom";
 import { Navbar } from "@/components/Navbar";
 import { NavChart } from "@/components/NavChart";
 import { KeyMetrics } from "@/components/KeyMetrics";
-import { DataSources } from "@/components/DataSources";
-import { AIExplanation } from "@/components/AIExplanation";
+import { EnhancedDataSources } from "@/components/EnhancedDataSources";
+import { EnhancedAIExplanation } from "@/components/EnhancedAIExplanation";
+import { VerifyAuditability } from "@/components/VerifyAuditability";
+import { ChainlinkDataFeeds } from "@/components/ChainlinkDataFeeds";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, ArrowUpRight, ArrowDownRight } from "lucide-react";
@@ -120,10 +122,23 @@ const PoolDetail = () => {
           </div>
         </div>
 
-        {/* Data Sources & AI Explanation */}
+        {/* Data Sources & Chainlink */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
+          <EnhancedDataSources 
+            poolId={poolId || ""} 
+            assetType={pool.assetType} 
+            baseValue={pool.latestNav} 
+          />
+          <ChainlinkDataFeeds 
+            poolId={poolId || ""} 
+            assetType={pool.assetType} 
+          />
+        </div>
+
+        {/* AI Explanation & Auditability */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <DataSources />
-          <AIExplanation poolId={poolId || ""} />
+          <EnhancedAIExplanation poolId={poolId || ""} />
+          <VerifyAuditability poolId={poolId || ""} poolName={pool.name} />
         </div>
       </main>
     </div>
