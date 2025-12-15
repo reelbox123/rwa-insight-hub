@@ -88,7 +88,10 @@ export function VerifyAuditability({ poolId, poolName }: VerifyAuditabilityProps
     setTimeout(() => setCopiedItem(null), 2000);
   };
 
-  const truncateHash = (hash: string) => `${hash.slice(0, 10)}...${hash.slice(-8)}`;
+  const truncateHash = (hash: string | undefined) => {
+    if (!hash) return "Loading...";
+    return `${hash.slice(0, 10)}...${hash.slice(-8)}`;
+  };
 
   const handleVerify = async () => {
     setIsVerifying(true);
@@ -104,7 +107,24 @@ export function VerifyAuditability({ poolId, poolName }: VerifyAuditabilityProps
     setTimeout(() => setVerificationStatus("idle"), 5000);
   };
 
-  if (!auditData) return null;
+  if (!auditData || isLoading) {
+    return (
+      <div className="glass-card p-4 animate-fade-in glow-primary">
+        <div className="flex items-center gap-2 mb-4">
+          <div className="rounded-full bg-primary/20 p-1.5">
+            <Shield className="h-3.5 w-3.5 text-primary" />
+          </div>
+          <div>
+            <h3 className="text-xs font-semibold text-foreground">Verify Auditability</h3>
+            <p className="text-[8px] text-muted-foreground">Loading Mantle Network data...</p>
+          </div>
+        </div>
+        <div className="flex items-center justify-center py-8">
+          <RefreshCw className="h-5 w-5 text-primary animate-spin" />
+        </div>
+      </div>
+    );
+  }
 
   const formatGas = (gas: number) => {
     return gas < 0.001 ? `${(gas * 1000000).toFixed(2)} µMNT` : `${(gas * 1000).toFixed(4)} mMNT`;
