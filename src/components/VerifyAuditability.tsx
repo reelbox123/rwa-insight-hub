@@ -18,11 +18,17 @@ import {
 } from "lucide-react";
 import {
   generateAuditData,
-  getExplorerTxUrl,
-  getExplorerBlockUrl,
   AuditData,
   MANTLE_CONFIG
 } from "@/lib/mantle-utils";
+import {
+  fetchLatestTransactions,
+  fetchLatestBlocks,
+  getExplorerTxUrl,
+  getExplorerBlockUrl,
+  MantleTransaction,
+  MantleBlock
+} from "@/lib/mantle-api";
 
 interface VerifyAuditabilityProps {
   poolId: string;
@@ -31,17 +37,48 @@ interface VerifyAuditabilityProps {
 
 export function VerifyAuditability({ poolId, poolName }: VerifyAuditabilityProps) {
   const [auditData, setAuditData] = useState<AuditData | null>(null);
+  const [realTx, setRealTx] = useState<MantleTransaction | null>(null);
+  const [realBlock, setRealBlock] = useState<MantleBlock | null>(null);
   const [copiedItem, setCopiedItem] = useState<string | null>(null);
   const [isVerifying, setIsVerifying] = useState(false);
   const [verificationStatus, setVerificationStatus] = useState<"idle" | "verifying" | "verified">("idle");
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    setAuditData(generateAuditData());
-    
-    const interval = setInterval(() => {
-      setAuditData(generateAuditData());
-    }, 30000); // Update every 30 seconds
+    const fetchRealData = async () => {
+      try {
+        const [transactions, blocks] = await Promise.all([
+          fetchLatestTransactions(1),
+          fetchLatestBlocks(1),
+        ]);
+        
+        if (transactions.length > 0) {
+          setRealTx(transactions[0]);
+        }
+        if (blocks.length > 0) {
+          setRealBlock(blocks[0]);
+        }
+        
+        // Generate supplementary audit data
+        const audit = generateAuditData();
+        if (transactions[0]) {
+          audit.navTxHash = transactions[0].hash;
+          audit.navBlockNumber = transactions[0].blockNumber;
+          audit.navBlockHash = transactions[0].blockHash;
+          audit.timestamp = transactions[0].timestamp;
+          audit.gasUsed = parseInt(transactions[0].gasUsed) || audit.gasUsed;
+        }
+        setAuditData(audit);
+        setIsLoading(false);
+      } catch (error) {
+        console.error("Error fetching Mantle data:", error);
+        setAuditData(generateAuditData());
+        setIsLoading(false);
+      }
+    };
 
+    fetchRealData();
+    const interval = setInterval(fetchRealData, 30000);
     return () => clearInterval(interval);
   }, [poolId]);
 

@@ -35,10 +35,8 @@ export function AIExplanation({ poolId }: AIExplanationProps) {
         contextualInfo = "Equity markets showed moderate activity. Sector rotation favored technology and healthcare.";
       } else if (pool.assetType === "Commodity") {
         contextualInfo = "Commodity prices reflected supply chain dynamics. Precious metals held steady.";
-      } else if (pool.assetType === "Real Estate") {
+      } else if (pool.assetType === "RWA") {
         contextualInfo = "Real estate valuations adjusted based on cap rate movements and occupancy data.";
-      } else if (pool.assetType === "Credit") {
-        contextualInfo = "Credit spreads tightened slightly. Investment grade bonds outperformed high yield.";
       } else {
         contextualInfo = "Alternative asset valuations updated based on latest market comparables.";
       }

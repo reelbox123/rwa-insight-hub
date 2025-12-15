@@ -20,7 +20,12 @@ import {
   getExplorerTxUrl,
   getExplorerAddressUrl 
 } from "@/lib/mantle-utils";
-import { formatTimeAgo } from "@/lib/realtime-data";
+
+function formatTimeAgo(minutes: number): string {
+  if (minutes < 1) return "Just now";
+  if (minutes < 60) return `${Math.floor(minutes)} min ago`;
+  return `${Math.floor(minutes / 60)} hr ago`;
+}
 
 interface EnhancedDataSourcesProps {
   poolId: string;

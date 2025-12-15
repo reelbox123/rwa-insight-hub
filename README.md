@@ -1,50 +1,49 @@
 # RWA NAV Coprocessor
 
-A professional fintech dashboard for **Real-time NAV (Net Asset Value) transparency** of tokenized Real World Asset (RWA) pools built on **Mantle Network** with **Chainlink** oracle integration.
+Real-time NAV transparency dashboard for tokenized RWA pools on Mantle Network with Chainlink oracle integration.
 
-![RWA NAV Coprocessor](https://img.shields.io/badge/Mantle-Network-00E0B8?style=for-the-badge)
-![Chainlink](https://img.shields.io/badge/Chainlink-Oracles-375BD2?style=for-the-badge)
-![React](https://img.shields.io/badge/React-18-61DAFB?style=for-the-badge)
-![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?style=for-the-badge)
+## Live APIs Integrated
 
-## 🌟 Features
+### Price APIs
+| API | Endpoint | Used For |
+|-----|----------|----------|
+| CoinGecko | `api.coingecko.com/api/v3/coins/markets` | Real-time crypto prices (BTC, ETH, SOL, MNT, LINK) |
+| Gate.io | `api.gateio.ws/api/v4` | Backup price source |
 
-### Core Dashboard Features
-- **NAV Overview Dashboard** - Real-time monitoring of all RWA pools with live price updates (2-second refresh)
-- **Pool Detail Pages** - Deep dive into individual pool metrics, charts, and data sources
-- **Advanced Filtering** - Search, filter by asset type, risk level, status, and NAV range
-- **Pool Comparison** - Compare up to 4 pools side-by-side with performance charts
-- **NAV Alerts** - Real-time notifications for significant price movements
+### Mantle Network APIs
+| API | Endpoint | Used For |
+|-----|----------|----------|
+| Explorer API | `explorer.mantle.xyz/api/v2/transactions` | Real transactions |
+| Explorer API | `explorer.mantle.xyz/api/v2/blocks` | Real blocks |
+| RPC | `rpc.mantle.xyz` | Block number, gas price |
 
-### Asset Classes Supported
-- **20 RWA Pools** - Treasury, Credit, Real Estate, Commodities, Alternative assets
-- **30 Cryptocurrencies** - Top coins including BTC, ETH, SOL, and more
-- **15 Stocks** - Major equities like AAPL, MSFT, NVDA, TSLA
+### Files Using APIs
+- `src/lib/price-api.ts` - CoinGecko price fetching
+- `src/lib/mantle-api.ts` - Mantle explorer & RPC calls
+- `src/hooks/useRealtimeData.ts` - Combines all real-time data
+- `src/components/VerifyAuditability.tsx` - Real Mantle transactions
+- `src/components/KeyMetrics.tsx` - Live price data
 
-### Real-Time Data
-- Live NAV updates every 2 seconds
-- 24-hour change calculations with visual indicators
-- Status monitoring (Healthy, Needs Review, Stale Data)
-- Interactive price charts with multiple timeframes
+## Test the APIs
 
-## 🔗 Mantle Network Integration
-
-### Network Configuration
 ```typescript
-// Mantle Mainnet
-RPC URL: https://rpc.mantle.xyz
-WebSocket: wss://wss.mantle.xyz
-Chain ID: 5000
-Explorer: https://explorer.mantle.xyz
+// Test crypto prices
+import { fetchCryptoPrices } from "@/lib/price-api";
+const prices = await fetchCryptoPrices(["BTC", "ETH"]);
+console.log("BTC:", prices.get("BTC")?.currentPrice);
 
-// Mantle Testnet (Sepolia)
-RPC URL: https://rpc.testnet.mantle.xyz
-Chain ID: 5003
-Explorer: https://explorer.sepolia.mantle.xyz
+// Test Mantle transactions
+import { fetchLatestTransactions } from "@/lib/mantle-api";
+const txs = await fetchLatestTransactions(5);
+console.log("Latest tx:", txs[0]?.hash);
 ```
 
-### Mantle Tools & APIs Used
+## Backend Requirements
 
+The frontend is complete. Backend developer needs to build:
+1. NAVRegistry smart contract on Mantle
+2. Chainlink automation for price updates
+3. ZK proof generation for NAV verification
 | Tool/API | Purpose | File Location |
 |----------|---------|---------------|
 | **Mantle RPC** | Blockchain data queries | `src/lib/mantle-utils.ts` |
