@@ -1,12 +1,14 @@
 import { useState, useEffect, useCallback } from "react";
 import { toast } from "sonner";
-import { fetchCryptoPrices, AssetPrice, getTreasuryRates } from "@/lib/price-api";
+import { fetchCryptoPrices, AssetPrice, getTreasuryRates, fetchAllMantlePrices } from "@/lib/price-api";
+import { MANTLE_TOKENS, MantleToken, getTokenExplorerUrl } from "@/lib/mantle-tokens";
 import { 
   fetchLatestTransactions, 
   fetchLatestBlocks, 
   MantleTransaction, 
   MantleBlock,
-  getLatestBlockNumber 
+  getLatestBlockNumber,
+  getExplorerTxUrl
 } from "@/lib/mantle-api";
 
 export interface Pool {
@@ -14,7 +16,7 @@ export interface Pool {
   name: string;
   tag: string;
   description: string;
-  assetType: "Treasury" | "Crypto" | "Commodity" | "Stock" | "RWA";
+  assetType: "Treasury" | "Crypto" | "Commodity" | "Stock" | "RWA" | "Stablecoin" | "LST" | "DeFi" | "Meme" | "Infrastructure" | "Wrapped" | "Native";
   riskLevel: "Low" | "Medium" | "High";
   latestNav: number;
   previousNav: number;
@@ -25,6 +27,9 @@ export interface Pool {
   priceData?: AssetPrice;
   unitPrice?: number;
   unitsOutstanding?: number;
+  contractAddress?: string;
+  explorerUrl?: string;
+  category?: string;
 }
 
 interface RealtimeStats {
@@ -49,97 +54,54 @@ export interface MantleData {
   currentBlockNumber: number;
 }
 
-// Pool definitions with underlying asset mappings
-const POOL_DEFINITIONS = [
-  {
-    id: "POOL-001",
-    name: "BlackRock Treasury Fund",
-    tag: "BUIDL",
-    description: "Tokenized US Treasury securities providing stable yield with institutional-grade custody",
-    assetType: "Treasury" as const,
-    riskLevel: "Low" as const,
-    baseNav: 10000000,
-    unitsOutstanding: 10000000,
-    cryptoSymbol: null,
-  },
-  {
-    id: "POOL-002",
-    name: "Bitcoin Tracker",
-    tag: "BTC",
-    description: "Direct exposure to Bitcoin with real-time NAV tracking and institutional custody",
-    assetType: "Crypto" as const,
-    riskLevel: "High" as const,
-    baseNav: 50000000,
-    unitsOutstanding: 500,
-    cryptoSymbol: "BTC",
-  },
-  {
-    id: "POOL-003",
-    name: "Ethereum Fund",
-    tag: "ETH",
-    description: "Ethereum exposure with staking rewards and DeFi yield optimization",
-    assetType: "Crypto" as const,
-    riskLevel: "High" as const,
-    baseNav: 25000000,
-    unitsOutstanding: 6500,
-    cryptoSymbol: "ETH",
-  },
-  {
-    id: "POOL-004",
-    name: "Gold Commodity Pool",
-    tag: "GOLD",
-    description: "Physical gold-backed tokens with verified reserves and real-time pricing",
-    assetType: "Commodity" as const,
-    riskLevel: "Medium" as const,
-    baseNav: 15000000,
-    unitsOutstanding: 5500,
-    cryptoSymbol: null,
-  },
-  {
-    id: "POOL-005",
-    name: "Real Estate Fund",
-    tag: "REIT",
-    description: "Diversified commercial real estate portfolio with quarterly distributions",
-    assetType: "RWA" as const,
-    riskLevel: "Medium" as const,
-    baseNav: 30000000,
-    unitsOutstanding: 300000,
-    cryptoSymbol: null,
-  },
-  {
-    id: "POOL-006",
-    name: "Solana Tracker",
-    tag: "SOL",
-    description: "Solana exposure with validator staking and ecosystem participation",
-    assetType: "Crypto" as const,
-    riskLevel: "High" as const,
-    baseNav: 8000000,
-    unitsOutstanding: 35000,
-    cryptoSymbol: "SOL",
-  },
-  {
-    id: "POOL-007",
-    name: "Mantle Native Fund",
-    tag: "MNT",
-    description: "Native MNT token exposure with L2 staking benefits",
-    assetType: "Crypto" as const,
-    riskLevel: "High" as const,
-    baseNav: 5000000,
-    unitsOutstanding: 4500000,
-    cryptoSymbol: "MNT",
-  },
-  {
-    id: "POOL-008",
-    name: "Chainlink Oracle Fund",
-    tag: "LINK",
-    description: "LINK token exposure benefiting from oracle network growth",
-    assetType: "Crypto" as const,
-    riskLevel: "High" as const,
-    baseNav: 12000000,
-    unitsOutstanding: 420000,
-    cryptoSymbol: "LINK",
-  },
-];
+// Convert Mantle tokens to pool definitions
+function createPoolDefinitions(): Array<{
+  id: string;
+  name: string;
+  tag: string;
+  description: string;
+  assetType: Pool["assetType"];
+  riskLevel: Pool["riskLevel"];
+  baseNav: number;
+  unitsOutstanding: number;
+  cryptoSymbol: string;
+  contractAddress: string;
+  category: string;
+}> {
+  return MANTLE_TOKENS.map((token, index) => {
+    // Determine risk level based on category
+    let riskLevel: Pool["riskLevel"] = "Medium";
+    if (token.category === "Stablecoin" || token.category === "RWA") {
+      riskLevel = "Low";
+    } else if (token.category === "Meme" || token.category === "DeFi") {
+      riskLevel = "High";
+    }
+
+    // Calculate base NAV (using market cap as base)
+    const baseNav = token.fallbackMarketCap > 0 
+      ? Math.min(token.fallbackMarketCap * 0.001, 50000000)
+      : token.fallbackPrice * 1000000;
+
+    // Calculate units outstanding
+    const unitsOutstanding = baseNav / token.fallbackPrice;
+
+    return {
+      id: `POOL-${String(index + 1).padStart(3, "0")}`,
+      name: token.name,
+      tag: token.symbol,
+      description: token.description,
+      assetType: token.category as Pool["assetType"],
+      riskLevel,
+      baseNav,
+      unitsOutstanding,
+      cryptoSymbol: token.symbol,
+      contractAddress: token.contractAddress,
+      category: token.category,
+    };
+  });
+}
+
+const POOL_DEFINITIONS = createPoolDefinitions();
 
 function formatTimeAgo(minutes: number): string {
   if (minutes < 1) return "Just now";
@@ -179,7 +141,6 @@ export function generateChartData(baseValue: number, days: number) {
     const date = new Date(now);
     date.setDate(date.getDate() - i);
     
-    // Generate realistic price movement
     const volatility = 0.02;
     const trend = 0.001;
     const randomWalk = (Math.random() - 0.5) * volatility;
@@ -195,22 +156,28 @@ export function generateChartData(baseValue: number, days: number) {
 }
 
 export function getAllPools(): Pool[] {
-  return POOL_DEFINITIONS.map(def => ({
-    id: def.id,
-    name: def.name,
-    tag: def.tag,
-    description: def.description,
-    assetType: def.assetType,
-    riskLevel: def.riskLevel,
-    latestNav: def.baseNav,
-    previousNav: def.baseNav * 0.99,
-    change24h: 1.0,
-    status: "Healthy" as const,
-    lastUpdated: "Just now",
-    minutesAgo: 0,
-    unitPrice: def.baseNav / def.unitsOutstanding,
-    unitsOutstanding: def.unitsOutstanding,
-  }));
+  return POOL_DEFINITIONS.map(def => {
+    const token = MANTLE_TOKENS.find(t => t.symbol === def.cryptoSymbol);
+    return {
+      id: def.id,
+      name: def.name,
+      tag: def.tag,
+      description: def.description,
+      assetType: def.assetType,
+      riskLevel: def.riskLevel,
+      latestNav: def.baseNav,
+      previousNav: def.baseNav * 0.99,
+      change24h: token?.fallbackChange24h || 0,
+      status: "Healthy" as const,
+      lastUpdated: "Just now",
+      minutesAgo: 0,
+      unitPrice: token?.fallbackPrice || def.baseNav / def.unitsOutstanding,
+      unitsOutstanding: def.unitsOutstanding,
+      contractAddress: def.contractAddress,
+      explorerUrl: getTokenExplorerUrl(def.contractAddress),
+      category: def.category,
+    };
+  });
 }
 
 export function useRealtimeData() {
@@ -234,10 +201,8 @@ export function useRealtimeData() {
 
   const fetchRealData = useCallback(async () => {
     try {
-      // Fetch crypto prices from CoinGecko
-      const cryptoSymbols = POOL_DEFINITIONS
-        .filter(p => p.cryptoSymbol)
-        .map(p => p.cryptoSymbol as string);
+      // Fetch all Mantle token prices
+      const cryptoSymbols = POOL_DEFINITIONS.map(p => p.cryptoSymbol);
       
       const [prices, transactions, blocks, blockNumber] = await Promise.all([
         fetchCryptoPrices(cryptoSymbols),
@@ -248,7 +213,7 @@ export function useRealtimeData() {
 
       const treasuryRates = getTreasuryRates();
 
-      // Update Mantle data
+      // Update Mantle data with real transactions
       setMantleData({
         latestTransaction: transactions[0] || null,
         latestBlock: blocks[0] || null,
@@ -259,41 +224,22 @@ export function useRealtimeData() {
 
       // Update pools with real prices
       const updatedPools: Pool[] = POOL_DEFINITIONS.map(poolDef => {
+        const token = MANTLE_TOKENS.find(t => t.symbol === poolDef.cryptoSymbol);
         let latestNav = poolDef.baseNav;
         let priceData: AssetPrice | undefined;
-        let change24h = 0;
-        let unitPrice = poolDef.baseNav / poolDef.unitsOutstanding;
+        let change24h = token?.fallbackChange24h || 0;
+        let unitPrice = token?.fallbackPrice || poolDef.baseNav / poolDef.unitsOutstanding;
 
-        if (poolDef.cryptoSymbol && prices.has(poolDef.cryptoSymbol)) {
+        if (prices.has(poolDef.cryptoSymbol)) {
           priceData = prices.get(poolDef.cryptoSymbol);
           if (priceData) {
-            // Calculate NAV based on real price and units held
             unitPrice = priceData.currentPrice;
             latestNav = unitPrice * poolDef.unitsOutstanding;
             change24h = priceData.priceChangePercentage24h;
           }
-        } else if (poolDef.assetType === "Treasury") {
-          // Treasury funds use yield-based NAV calculation
-          const avgYield = treasuryRates["10-Year"];
-          const dailyAccrual = poolDef.baseNav * (avgYield / 100 / 365);
-          latestNav = poolDef.baseNav + dailyAccrual;
-          change24h = avgYield / 365;
-          unitPrice = latestNav / poolDef.unitsOutstanding;
-        } else if (poolDef.assetType === "Commodity") {
-          // Gold price - approximate current market price ($2,650/oz)
-          const goldPricePerOz = 2650 + (Math.random() - 0.5) * 20;
-          const ouncesHeld = poolDef.baseNav / 2600;
-          latestNav = goldPricePerOz * ouncesHeld;
-          change24h = ((goldPricePerOz - 2640) / 2640) * 100;
-          unitPrice = latestNav / poolDef.unitsOutstanding;
-        } else if (poolDef.assetType === "RWA") {
-          // Real estate NAV - stable with small daily changes
-          latestNav = poolDef.baseNav * (1 + (Math.random() - 0.5) * 0.001);
-          change24h = (Math.random() - 0.5) * 0.2;
-          unitPrice = latestNav / poolDef.unitsOutstanding;
         }
 
-        const minutesAgo = Math.random() * 3; // Recently updated
+        const minutesAgo = Math.random() * 3;
 
         return {
           id: poolDef.id,
@@ -311,24 +257,33 @@ export function useRealtimeData() {
           priceData,
           unitPrice,
           unitsOutstanding: poolDef.unitsOutstanding,
+          contractAddress: poolDef.contractAddress,
+          explorerUrl: getTokenExplorerUrl(poolDef.contractAddress),
+          category: poolDef.category,
         };
       });
 
       setPools(updatedPools);
       setLastPriceUpdate(new Date());
 
-      // Update data sources
+      // Update data sources with real price data
       const updatedSources: DataSource[] = [
         {
-          name: "Chainlink BTC/USD",
+          name: "CoinGecko BTC/USD",
           type: "Price Oracle",
-          value: prices.get("BTC")?.currentPrice || 104500,
+          value: prices.get("WBTC")?.currentPrice || prices.get("FBTC")?.currentPrice || 101387,
           lastUpdated: 0,
         },
         {
-          name: "Chainlink ETH/USD",
+          name: "CoinGecko ETH/USD",
           type: "Price Oracle",
-          value: prices.get("ETH")?.currentPrice || 3950,
+          value: prices.get("WETH")?.currentPrice || prices.get("mETH")?.currentPrice || 3905,
+          lastUpdated: 0,
+        },
+        {
+          name: "CoinGecko MNT/USD",
+          type: "Price Oracle",
+          value: prices.get("MNT")?.currentPrice || 1.28,
           lastUpdated: 0,
         },
         {
@@ -343,13 +298,19 @@ export function useRealtimeData() {
           value: treasuryRates["10-Year"],
           lastUpdated: 2,
         },
+        {
+          name: "Mantle Block Height",
+          type: "On-Chain Position",
+          value: blockNumber,
+          lastUpdated: 0,
+        },
       ];
       setSources(updatedSources);
 
       // Calculate stats
       const totalNav = updatedPools.reduce((sum, pool) => sum + pool.latestNav, 0);
       const previousTotalNav = updatedPools.reduce((sum, pool) => sum + pool.previousNav, 0);
-      const navChange = ((totalNav - previousTotalNav) / previousTotalNav) * 100;
+      const navChange = previousTotalNav > 0 ? ((totalNav - previousTotalNav) / previousTotalNav) * 100 : 0;
 
       setStats({
         totalNav,
@@ -366,12 +327,8 @@ export function useRealtimeData() {
   }, []);
 
   useEffect(() => {
-    // Initial fetch
     fetchRealData();
-
-    // Refresh every 30 seconds to respect API rate limits
     const interval = setInterval(fetchRealData, 30000);
-
     return () => clearInterval(interval);
   }, [fetchRealData]);
 
@@ -395,32 +352,47 @@ export function usePoolRealtimeData(poolId: string) {
 
   useEffect(() => {
     if (pool) {
-      // Generate chart data based on pool's NAV
       const data = generateChartData(pool.latestNav, 7);
       setChartData(data);
 
-      // Generate AI explanation based on real data
+      // Generate detailed AI explanation based on real data
       const direction = pool.change24h >= 0 ? "increased" : "decreased";
       const changeAbs = Math.abs(pool.change24h).toFixed(2);
       
-      let explanation = `Today's NAV ${direction} by ${changeAbs}%. `;
+      let explanation = `**${pool.name} (${pool.tag}) NAV Analysis**\n\n`;
+      explanation += `Today's NAV ${direction} by ${changeAbs}%. `;
       
       if (pool.priceData) {
-        explanation += `${pool.tag} is currently trading at $${pool.priceData.currentPrice.toLocaleString()} `;
-        explanation += `with a 24h high of $${pool.priceData.high24h?.toLocaleString() || "N/A"} `;
-        explanation += `and low of $${pool.priceData.low24h?.toLocaleString() || "N/A"}. `;
-        explanation += `Trading volume: $${((pool.priceData.volume24h || 0) / 1e9).toFixed(2)}B. `;
+        explanation += `\n\n**Current Market Data:**\n`;
+        explanation += `• Price: $${pool.priceData.currentPrice.toLocaleString()}\n`;
+        explanation += `• 24h High: $${pool.priceData.high24h?.toLocaleString() || "N/A"}\n`;
+        explanation += `• 24h Low: $${pool.priceData.low24h?.toLocaleString() || "N/A"}\n`;
+        explanation += `• Volume: $${((pool.priceData.volume24h || 0) / 1e6).toFixed(2)}M\n`;
+        explanation += `• Market Cap: $${((pool.priceData.marketCap || 0) / 1e9).toFixed(2)}B\n`;
       }
       
-      if (pool.assetType === "Treasury") {
-        explanation += "Treasury yields remained stable with consistent daily accrual. ";
+      explanation += `\n**Pool Metrics:**\n`;
+      explanation += `• Total NAV: $${pool.latestNav.toLocaleString()}\n`;
+      explanation += `• Unit Price: $${pool.unitPrice?.toFixed(4) || "N/A"}\n`;
+      explanation += `• Units Outstanding: ${pool.unitsOutstanding?.toLocaleString() || "N/A"}\n`;
+      explanation += `• Risk Level: ${pool.riskLevel}\n`;
+      explanation += `• Status: ${pool.status}\n`;
+      
+      if (pool.contractAddress) {
+        explanation += `\n**On-Chain Reference:**\n`;
+        explanation += `• Contract: ${pool.contractAddress.slice(0, 10)}...${pool.contractAddress.slice(-8)}\n`;
+        explanation += `• Network: Mantle (Chain ID: 5000)\n`;
       }
       
-      explanation += `Pool maintains ${pool.riskLevel.toLowerCase()} risk profile with ${pool.status.toLowerCase()} status.`;
+      if (mantleData.latestTransaction) {
+        explanation += `\n**Latest Network Activity:**\n`;
+        explanation += `• Block: #${mantleData.currentBlockNumber.toLocaleString()}\n`;
+        explanation += `• Recent Tx: ${mantleData.latestTransaction.hash.slice(0, 10)}...\n`;
+      }
       
       setAiExplanation(explanation);
     }
-  }, [pool, pools]);
+  }, [pool, pools, mantleData]);
 
   return { 
     pool, 
