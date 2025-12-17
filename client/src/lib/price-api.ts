@@ -1,5 +1,5 @@
 // Real-time Price API Integration
-// Uses Gate.io API for cryptocurrency prices and other sources for RWA/stocks
+// Uses CoinGecko API for cryptocurrency prices
 
 export interface PriceData {
   symbol: string;
@@ -31,39 +31,59 @@ const CORS_PROXY = "https://api.allorigins.win/raw?url=";
 // CoinGecko API
 const COINGECKO_API_BASE = "https://api.coingecko.com/api/v3";
 
-// Mapping of our asset IDs to CoinGecko IDs
-const COINGECKO_IDS: Record<string, string> = {
-  "BTC": "bitcoin",
-  "ETH": "ethereum",
-  "SOL": "solana",
-  "MNT": "mantle",
-  "LINK": "chainlink",
-};
+// Import Mantle tokens for price mapping
+import { MANTLE_TOKENS, MantleToken } from "./mantle-tokens";
 
-// Current real prices as of December 15, 2024 (updated fallback)
-const CURRENT_PRICES: Record<string, { price: number; change: number; high: number; low: number; volume: number; marketCap: number }> = {
-  "BTC": { price: 101387, change: -0.82, high: 102880, low: 100610, volume: 42500000000, marketCap: 2010000000000 },
-  "ETH": { price: 3905, change: -0.42, high: 3955, low: 3870, volume: 18200000000, marketCap: 470000000000 },
-  "SOL": { price: 220.50, change: 1.85, high: 225.40, low: 215.20, volume: 3800000000, marketCap: 105000000000 },
-  "MNT": { price: 1.28, change: 2.15, high: 1.32, low: 1.24, volume: 185000000, marketCap: 4200000000 },
-  "LINK": { price: 27.85, change: 3.42, high: 28.50, low: 26.80, volume: 1250000000, marketCap: 17500000000 },
-};
+// Build CoinGecko ID mapping from Mantle tokens
+function buildCoinGeckoMapping(): Record<string, string> {
+  const mapping: Record<string, string> = {};
+  for (const token of MANTLE_TOKENS) {
+    if (token.coingeckoId) {
+      mapping[token.symbol] = token.coingeckoId;
+      mapping[token.id] = token.coingeckoId;
+    }
+  }
+  return mapping;
+}
+
+const COINGECKO_IDS = buildCoinGeckoMapping();
+
+// Build fallback prices from Mantle tokens
+function buildFallbackPrices(): Record<string, { price: number; change: number; high: number; low: number; volume: number; marketCap: number }> {
+  const prices: Record<string, { price: number; change: number; high: number; low: number; volume: number; marketCap: number }> = {};
+  for (const token of MANTLE_TOKENS) {
+    prices[token.symbol] = {
+      price: token.fallbackPrice,
+      change: token.fallbackChange24h,
+      high: token.fallbackPrice * 1.02,
+      low: token.fallbackPrice * 0.98,
+      volume: token.fallbackVolume24h,
+      marketCap: token.fallbackMarketCap,
+    };
+    prices[token.id] = prices[token.symbol];
+  }
+  return prices;
+}
+
+const CURRENT_PRICES = buildFallbackPrices();
 
 /**
- * Fetch cryptocurrency prices - uses CORS proxy then fallback to current prices
+ * Fetch cryptocurrency prices from CoinGecko
  */
 export async function fetchCryptoPrices(symbols: string[]): Promise<Map<string, AssetPrice>> {
   try {
     const ids = symbols
       .map(s => COINGECKO_IDS[s])
-      .filter(Boolean)
-      .join(",");
+      .filter(Boolean);
     
-    if (!ids) {
+    // Remove duplicates
+    const uniqueIds = [...new Set(ids)].join(",");
+    
+    if (!uniqueIds) {
       return getFallbackCryptoPrices(symbols);
     }
 
-    const url = `${COINGECKO_API_BASE}/coins/markets?vs_currency=usd&ids=${ids}&order=market_cap_desc&sparkline=false&price_change_percentage=24h`;
+    const url = `${COINGECKO_API_BASE}/coins/markets?vs_currency=usd&ids=${uniqueIds}&order=market_cap_desc&sparkline=false&price_change_percentage=24h`;
     
     const response = await fetch(CORS_PROXY + encodeURIComponent(url), {
       headers: { 'Accept': 'application/json' },
@@ -76,30 +96,53 @@ export async function fetchCryptoPrices(symbols: string[]): Promise<Map<string, 
     const data = await response.json();
     const prices = new Map<string, AssetPrice>();
     
+    // Map CoinGecko response back to our symbols
     for (const coin of data) {
-      const symbol = Object.entries(COINGECKO_IDS).find(([_, id]) => id === coin.id)?.[0];
-      if (symbol) {
+      // Find all symbols that map to this CoinGecko ID
+      const matchingSymbols = Object.entries(COINGECKO_IDS)
+        .filter(([_, id]) => id === coin.id)
+        .map(([symbol]) => symbol);
+      
+      for (const symbol of matchingSymbols) {
         prices.set(symbol, {
           id: coin.id,
           name: coin.name,
           symbol: symbol,
           currentPrice: coin.current_price,
-          priceChange24h: coin.price_change_24h,
-          priceChangePercentage24h: coin.price_change_percentage_24h,
-          marketCap: coin.market_cap,
-          volume24h: coin.total_volume,
-          high24h: coin.high_24h,
-          low24h: coin.low_24h,
-          lastUpdated: new Date(coin.last_updated),
+          priceChange24h: coin.price_change_24h || 0,
+          priceChangePercentage24h: coin.price_change_percentage_24h || 0,
+          marketCap: coin.market_cap || 0,
+          volume24h: coin.total_volume || 0,
+          high24h: coin.high_24h || coin.current_price * 1.02,
+          low24h: coin.low_24h || coin.current_price * 0.98,
+          lastUpdated: new Date(coin.last_updated || Date.now()),
         });
+      }
+    }
+    
+    // Fill in any missing prices with fallbacks
+    for (const symbol of symbols) {
+      if (!prices.has(symbol)) {
+        const fallback = getFallbackPrice(symbol);
+        if (fallback) {
+          prices.set(symbol, fallback);
+        }
       }
     }
     
     return prices.size > 0 ? prices : getFallbackCryptoPrices(symbols);
   } catch (error) {
-    console.warn("Using current market prices (API unavailable)");
+    console.warn("Using fallback prices (API unavailable):", error);
     return getFallbackCryptoPrices(symbols);
   }
+}
+
+/**
+ * Fetch all Mantle token prices at once
+ */
+export async function fetchAllMantlePrices(): Promise<Map<string, AssetPrice>> {
+  const allSymbols = MANTLE_TOKENS.map(t => t.symbol);
+  return fetchCryptoPrices(allSymbols);
 }
 
 /**
@@ -111,32 +154,42 @@ export async function fetchSingleCryptoPrice(symbol: string): Promise<AssetPrice
 }
 
 /**
- * Current market prices as of December 15, 2024
+ * Get fallback price for a single symbol
+ */
+function getFallbackPrice(symbol: string): AssetPrice | null {
+  const data = CURRENT_PRICES[symbol];
+  const token = MANTLE_TOKENS.find(t => t.symbol === symbol || t.id === symbol);
+  
+  if (!data || !token) return null;
+  
+  const variation = 1 + (Math.random() - 0.5) * 0.002;
+  const currentPrice = data.price * variation;
+  
+  return {
+    id: token.coingeckoId || symbol.toLowerCase(),
+    name: token.name,
+    symbol: symbol,
+    currentPrice: currentPrice,
+    priceChange24h: currentPrice * data.change / 100,
+    priceChangePercentage24h: data.change,
+    marketCap: data.marketCap,
+    volume24h: data.volume,
+    high24h: data.high,
+    low24h: data.low,
+    lastUpdated: new Date(),
+  };
+}
+
+/**
+ * Fallback prices when API is unavailable
  */
 function getFallbackCryptoPrices(symbols: string[]): Map<string, AssetPrice> {
   const prices = new Map<string, AssetPrice>();
-  const now = new Date();
 
   for (const symbol of symbols) {
-    const data = CURRENT_PRICES[symbol];
-    if (data) {
-      // Add small random variation to simulate live updates
-      const variation = 1 + (Math.random() - 0.5) * 0.002;
-      const currentPrice = data.price * variation;
-      
-      prices.set(symbol, {
-        id: symbol.toLowerCase(),
-        name: symbol === "BTC" ? "Bitcoin" : symbol === "ETH" ? "Ethereum" : symbol === "SOL" ? "Solana" : symbol === "MNT" ? "Mantle" : "Chainlink",
-        symbol: symbol,
-        currentPrice: currentPrice,
-        priceChange24h: currentPrice * data.change / 100,
-        priceChangePercentage24h: data.change,
-        marketCap: data.marketCap,
-        volume24h: data.volume,
-        high24h: data.high,
-        low24h: data.low,
-        lastUpdated: now,
-      });
+    const price = getFallbackPrice(symbol);
+    if (price) {
+      prices.set(symbol, price);
     }
   }
 
@@ -164,17 +217,16 @@ export function calculateRWANav(
 
 /**
  * Get treasury yield rates (US Treasury bonds)
- * Uses approximate current rates - in production, use Treasury API
  */
 export function getTreasuryRates(): Record<string, number> {
   return {
-    "3-Month": 5.25,
-    "6-Month": 5.15,
-    "1-Year": 4.85,
-    "2-Year": 4.35,
+    "3-Month": 4.65,
+    "6-Month": 4.55,
+    "1-Year": 4.35,
+    "2-Year": 4.25,
     "5-Year": 4.15,
-    "10-Year": 4.25,
-    "30-Year": 4.45,
+    "10-Year": 4.40,
+    "30-Year": 4.55,
   };
 }
 
@@ -186,38 +238,8 @@ export function calculateTreasuryNav(
   avgYield: number,
   daysToMaturity: number
 ): number {
-  // Simple present value calculation
   const discountRate = avgYield / 100;
   const yearsToMaturity = daysToMaturity / 365;
   const presentValue = faceValue / Math.pow(1 + discountRate, yearsToMaturity);
   return presentValue;
 }
-
-// API Documentation for README
-export const API_DOCUMENTATION = `
-## Price API Integration
-
-### CoinGecko API (Primary)
-- **Endpoint**: https://api.coingecko.com/api/v3
-- **Used For**: Real-time cryptocurrency prices
-- **Rate Limit**: 10-30 calls/minute (free tier)
-- **Documentation**: https://www.coingecko.com/en/api/documentation
-
-### Gate.io API (Backup)
-- **Endpoint**: https://api.gateio.ws/api/v4
-- **Used For**: Alternative crypto price source
-- **Documentation**: https://www.gate.io/docs/developers/apiv4
-
-### Endpoints Used:
-1. \`/coins/markets\` - Get current prices for multiple coins
-2. \`/simple/price\` - Get simple price data
-3. \`/coins/{id}/market_chart\` - Get historical price data
-
-### Implementation:
-\`\`\`typescript
-// Fetch real-time crypto prices
-const prices = await fetchCryptoPrices(["BTC", "ETH", "SOL", "MNT"]);
-const btcPrice = prices.get("BTC");
-console.log(\`Bitcoin: $\${btcPrice?.currentPrice}\`);
-\`\`\`
-`;
