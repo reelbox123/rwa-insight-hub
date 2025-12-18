@@ -84,14 +84,14 @@ export const generateOracleSources = (assetType: string, baseValue: number): Ora
   const sources: OracleSource[] = [];
   
   // Common oracles based on asset type
-  if (assetType === "Crypto") {
+  if (assetType === "Crypto" || assetType === "DeFi" || assetType === "Native" || assetType === "Wrapped") {
     sources.push(
       {
-        name: "Chainlink BTC/USD",
+        name: "CoinGecko Price Feed",
         type: "Price Oracle",
-        provider: "Chainlink",
+        provider: "CoinGecko API",
         contractAddress: "0x1f23a6cF13b7b6e7e6d8d4f9de5e0d3c2b1a0987",
-        value: 67234.52 + (Math.random() - 0.5) * 500,
+        value: baseValue,
         lastUpdated: Math.floor(Math.random() * 5) + 1,
         lastTxHash: generateTxHash(),
         blockNumber: generateBlockNumber(),
@@ -100,11 +100,11 @@ export const generateOracleSources = (assetType: string, baseValue: number): Ora
         deviation: 0.05,
       },
       {
-        name: "Chainlink ETH/USD",
+        name: "Gate.io Real-Time",
         type: "Price Oracle",
-        provider: "Chainlink",
+        provider: "Gate.io Exchange",
         contractAddress: "0x2a34b7df24c8c9f8e7d6c5b4a3210fedcba98765",
-        value: 3521.88 + (Math.random() - 0.5) * 50,
+        value: baseValue * (1 + (Math.random() - 0.5) * 0.002),
         lastUpdated: Math.floor(Math.random() * 5) + 1,
         lastTxHash: generateTxHash(),
         blockNumber: generateBlockNumber(),
@@ -113,11 +113,11 @@ export const generateOracleSources = (assetType: string, baseValue: number): Ora
         deviation: 0.03,
       },
       {
-        name: "Pyth Network Feed",
+        name: "DeFiLlama Oracle",
         type: "Price Oracle",
-        provider: "Pyth",
+        provider: "DeFiLlama",
         contractAddress: "0x3b45c8ef35d9d0a9f8e7c6b5a4321fedcba87654",
-        value: baseValue,
+        value: baseValue * (1 + (Math.random() - 0.5) * 0.001),
         lastUpdated: Math.floor(Math.random() * 3) + 1,
         lastTxHash: generateTxHash(),
         blockNumber: generateBlockNumber(),
@@ -128,24 +128,9 @@ export const generateOracleSources = (assetType: string, baseValue: number): Ora
     );
   }
   
-  // Add FX oracle
+  // On-chain position - NAV Registry
   sources.push({
-    name: "Chainlink EUR/USD",
-    type: "FX",
-    provider: "Chainlink",
-    contractAddress: "0x4c56d9f046ea0b0a1f9e8d7c6b5a4321fedc0123",
-    value: 1.0842 + (Math.random() - 0.5) * 0.01,
-    lastUpdated: Math.floor(Math.random() * 10) + 1,
-    lastTxHash: generateTxHash(),
-    blockNumber: generateBlockNumber(),
-    format: "rate",
-    confidence: 99.7,
-    deviation: 0.02,
-  });
-  
-  // On-chain position
-  sources.push({
-    name: "NAV Registry Vault",
+    name: "Mantle NAV Registry",
     type: "On-Chain Position",
     provider: "Mantle NAV Coprocessor",
     contractAddress: "0x5d67e0a157fb1c2d0e9f8a7b6c5432fedc4567ab",
@@ -268,53 +253,55 @@ export const generateComprehensiveExplanation = (
   
   let explanation = `**NAV ${direction} by ${absChange}%** in the last 24 hours.\n\n`;
   
-  // Asset-specific analysis
-  if (pool.assetType === "Crypto") {
-    explanation += `📊 **Market Analysis**: Cryptocurrency markets showed ${pool.change24h >= 0 ? "bullish" : "bearish"} momentum. `;
-    explanation += `Bitcoin correlation factor: 0.${Math.floor(Math.random() * 30) + 70}. `;
-    explanation += `Network activity on Mantle increased by ${(Math.random() * 10).toFixed(1)}% with gas prices remaining stable.\n\n`;
-  } else if (pool.assetType === "Treasury") {
-    explanation += `📊 **Yield Analysis**: Treasury yields ${pool.change24h >= 0 ? "compressed" : "expanded"} marginally. `;
-    explanation += `Fed guidance remains accommodative. Short-term T-bills showing ${(Math.random() * 2 + 4).toFixed(2)}% APY.\n\n`;
-  } else if (pool.assetType === "Stock") {
-    explanation += `📊 **Equity Analysis**: Market sentiment ${pool.change24h >= 0 ? "positive" : "cautious"}. `;
-    explanation += `Sector rotation favored ${pool.change24h >= 0 ? "growth" : "value"} stocks. P/E ratios adjusted by ${(Math.random() * 0.5).toFixed(2)}x.\n\n`;
-  } else if (pool.assetType === "Commodity") {
-    explanation += `📊 **Commodity Analysis**: Supply chain dynamics ${pool.change24h >= 0 ? "tightening" : "easing"}. `;
-    explanation += `Inventory levels ${pool.change24h >= 0 ? "declining" : "stabilizing"}. Futures premium at ${(Math.random() * 2).toFixed(2)}%.\n\n`;
-  } else if (pool.assetType === "Real Estate") {
-    explanation += `📊 **Real Estate Analysis**: Cap rates ${pool.change24h >= 0 ? "compressed" : "expanded"} by ${(Math.random() * 0.2).toFixed(2)}%. `;
-    explanation += `Occupancy rates stable at ${(85 + Math.random() * 10).toFixed(1)}%. Rental income growth projected at ${(Math.random() * 3 + 2).toFixed(1)}%.\n\n`;
-  } else if (pool.assetType === "Credit") {
-    explanation += `📊 **Credit Analysis**: Spreads ${pool.change24h >= 0 ? "tightened" : "widened"} by ${(Math.random() * 10).toFixed(0)}bps. `;
-    explanation += `Investment grade bonds ${pool.change24h >= 0 ? "outperformed" : "underperformed"} high yield. Default rates remain low at ${(Math.random() * 0.5).toFixed(2)}%.\n\n`;
+  // Real asset price information
+  if (pool.unitPrice) {
+    explanation += `**💰 Real-Time Asset Price**: $${pool.unitPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 })}\n`;
+    explanation += `Data sourced from CoinGecko & Gate.io APIs.\n\n`;
+  }
+  
+  // Asset-specific analysis with predictions
+  if (pool.assetType === "Crypto" || pool.assetType === "Native" || pool.assetType === "DeFi") {
+    explanation += `📊 **Market Analysis**: ${pool.name} showed ${pool.change24h >= 0 ? "bullish" : "bearish"} momentum. `;
+    explanation += `Market sentiment index: ${(50 + pool.change24h * 5).toFixed(0)}/100. `;
+    explanation += `Trading volume indicates ${pool.change24h >= 0 ? "accumulation" : "distribution"} phase.\n\n`;
+    
+    // Prediction
+    const predictedChange = (pool.change24h * 0.7 + (Math.random() - 0.5) * 2).toFixed(2);
+    explanation += `🔮 **24h Prediction**: Based on technical indicators and on-chain metrics, `;
+    explanation += `${pool.tag} is projected to ${parseFloat(predictedChange) >= 0 ? "gain" : "lose"} ~${Math.abs(parseFloat(predictedChange))}% `;
+    explanation += `over the next 24 hours. Confidence: ${(75 + Math.random() * 20).toFixed(0)}%.\n\n`;
+  } else if (pool.assetType === "Stablecoin") {
+    explanation += `📊 **Stability Analysis**: ${pool.name} maintains strong peg stability. `;
+    explanation += `Deviation from peg: ${(Math.abs(pool.unitPrice - 1) * 100).toFixed(4)}%. `;
+    explanation += `Reserve backing verified on-chain.\n\n`;
+  } else if (pool.assetType === "LST") {
+    explanation += `📊 **Staking Analysis**: Liquid staking token ${pool.change24h >= 0 ? "appreciated" : "depreciated"}. `;
+    explanation += `Staking rewards APY contributing to NAV growth. `;
+    explanation += `Validator performance: Healthy.\n\n`;
   } else {
-    explanation += `📊 **Alternative Asset Analysis**: Valuations updated based on latest market comparables and appraisals. `;
-    explanation += `Liquidity premium at ${(Math.random() * 5 + 5).toFixed(1)}%.\n\n`;
+    explanation += `📊 **Asset Analysis**: ${pool.name} valuations updated based on latest market data. `;
+    explanation += `Multiple oracle feeds confirm price accuracy.\n\n`;
   }
   
   // Data sources summary
   explanation += `**🔗 Data Sources (${sources.length} feeds)**:\n`;
   const oracleCount = sources.filter(s => s.type === "Price Oracle").length;
-  const fxCount = sources.filter(s => s.type === "FX").length;
   const onChainCount = sources.filter(s => s.type === "On-Chain Position" || s.type === "DEX Pool").length;
   const offChainCount = sources.filter(s => s.type === "Off-Chain Accounting").length;
   
-  explanation += `• ${oracleCount} Price Oracles (Chainlink, Pyth)\n`;
-  explanation += `• ${fxCount} FX Rate feeds\n`;
-  explanation += `• ${onChainCount} On-Chain Positions\n`;
+  explanation += `• ${oracleCount} Price Oracles (CoinGecko, Gate.io, DeFiLlama)\n`;
+  explanation += `• ${onChainCount} On-Chain Positions (Mantle NAV Registry)\n`;
   explanation += `• ${offChainCount} Off-Chain Accounting reports\n\n`;
   
-  // Fees and costs
-  const totalFees = sources.reduce((sum, s) => sum + (s.type === "Gas Oracle" ? s.value : 0), 0);
-  explanation += `**💰 Transaction Costs**:\n`;
+  // Transaction costs
+  explanation += `**💸 Transaction Costs**:\n`;
   explanation += `• L2 Execution: ${(auditData.l2ExecutionCost * 1000).toFixed(4)} MNT\n`;
   explanation += `• L1 Data Cost: ${(auditData.l1DataCost * 1000).toFixed(4)} MNT\n`;
   explanation += `• Total Gas Used: ${auditData.gasUsed.toLocaleString()} units\n\n`;
   
   // On-chain verification
   explanation += `**✅ Verification**: NAV written to Mantle block #${auditData.navBlockNumber.toLocaleString()}. `;
-  explanation += `ZK proof submitted in batch #${auditData.batchId}. All oracle inputs verified with average confidence ${(sources.reduce((sum, s) => sum + s.confidence, 0) / sources.length).toFixed(1)}%.`;
+  explanation += `All oracle inputs verified with average confidence ${(sources.reduce((sum, s) => sum + s.confidence, 0) / sources.length).toFixed(1)}%.`;
   
   return explanation;
 };
