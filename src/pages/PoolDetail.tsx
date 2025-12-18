@@ -5,7 +5,8 @@ import { KeyMetrics } from "@/components/KeyMetrics";
 import { EnhancedDataSources } from "@/components/EnhancedDataSources";
 import { EnhancedAIExplanation } from "@/components/EnhancedAIExplanation";
 import { VerifyAuditability } from "@/components/VerifyAuditability";
-import { ChainlinkDataFeeds } from "@/components/ChainlinkDataFeeds";
+import { DeFiTVLMetrics } from "@/components/DeFiTVLMetrics";
+import { NavAdminReport } from "@/components/NavAdminReport";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, ArrowUpRight, ArrowDownRight } from "lucide-react";
@@ -122,22 +123,24 @@ const PoolDetail = () => {
           </div>
         </div>
 
-        {/* Data Sources & Chainlink */}
+        {/* Data Sources & DeFi TVL */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
           <EnhancedDataSources 
             poolId={poolId || ""} 
             assetType={pool.assetType} 
             baseValue={pool.latestNav} 
           />
-          <ChainlinkDataFeeds 
-            poolId={poolId || ""} 
-            assetType={pool.assetType} 
-          />
+          <DeFiTVLMetrics />
         </div>
 
-        {/* AI Explanation & Auditability */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* AI Explanation & Admin Report */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
           <EnhancedAIExplanation poolId={poolId || ""} />
+          <NavAdminReport poolId={poolId || ""} poolName={pool.name} />
+        </div>
+
+        {/* Auditability Verification */}
+        <div className="grid grid-cols-1 gap-4">
           <VerifyAuditability poolId={poolId || ""} poolName={pool.name} />
         </div>
       </main>
